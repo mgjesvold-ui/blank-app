@@ -1,13 +1,14 @@
 # 🍽️ Middagslogg
 
 En enkel app for mobilen for å logge middagene dere spiser, registrere hvilke varer hver middag trenger,
-og lage en samlet handleliste for en hel uke eller måned.
+og lage en samlet handleliste for en hel uke eller måned – inkludert faste varer til frokost, matpakker, kveldsmat og lørdagsgodt.
 
 ## Funksjoner
 
 - **Logg** – registrer dato og middag (navn foreslås fra tidligere middager).
 - **Middager** – legg til varer (mengde, enhet og butikkavdeling) og notater/oppskrift for hver middag.
   Viser hvor ofte hver middag er spist.
+- **Faste varer** – varer dere bruker hver uke (frokost, matpakke, kveldsmat, lørdagsgodt, husholdning), oppgitt per uke.
 - **Handleliste** – velg siste uke, siste 30 dager eller en egen periode. Varene fra alle middagene i
   perioden summeres (g/kg og ml/dl/l slås sammen) og grupperes etter avdeling. Juster antall per middag,
   eller gang hele perioden opp, for å planlegge neste måned. Kryss av det du har hjemme, og kopier eller del listen.

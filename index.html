@@ -93,12 +93,17 @@
 <nav>
   <button data-tab="log" class="active"><span>🍽️</span>Logg</button>
   <button data-tab="dinners"><span>📖</span>Middager</button>
+  <button data-tab="staples"><span>🥪</span>Faste varer</button>
   <button data-tab="shop"><span>🛒</span>Handleliste</button>
   <button data-tab="settings"><span>⚙️</span>Data</button>
 </nav>
 
 <dialog id="dlg"><form method="dialog" id="dlgForm"><div class="dlg-body" id="dlgBody"></div><div class="dlg-foot" id="dlgFoot"></div></form></dialog>
 <dialog id="cfm"><div class="dlg-body" id="cfmText"></div><div class="dlg-foot"><button type="button" class="btn secondary" id="cfmNo">Avbryt</button><button type="button" class="btn" id="cfmYes">OK</button></div></dialog>
+<dialog id="txt"><div class="dlg-body"><h2>Handleliste</h2>
+  <p class="muted" style="margin-top:0">Trykk og hold i teksten → «Marker alt» → «Kopier». Lim den inn i f.eks. Notater, Påminnelser eller Meldinger.</p>
+  <textarea id="txtArea" readonly style="min-height:50vh;font-size:15px"></textarea></div>
+  <div class="dlg-foot"><button type="button" class="btn" id="txtClose">Lukk</button></div></dialog>
 <div class="toast" id="toast"></div>
 
 <datalist id="dinnerNames"></datalist>
@@ -109,7 +114,8 @@
 const STORE_KEY = "middagslogg.v1";
 const UNITS = ["stk", "g", "kg", "ml", "dl", "l", "ss", "ts", "pk", "boks", "bunt", "fedd"];
 const CATEGORIES = ["Frukt og grønt", "Kjøtt", "Fisk", "Meieri og egg", "Brød og bakevarer",
-  "Tørrvarer", "Hermetikk", "Krydder og sauser", "Frysevarer", "Annet"];
+  "Tørrvarer", "Hermetikk", "Krydder og sauser", "Frysevarer", "Drikke", "Godteri og snacks", "Husholdning", "Annet"];
+const MEALS = ["Frokost", "Matpakke", "Kveldsmat", "Lørdagsgodt", "Husholdning", "Annet"];
 // Units that can be summed together, expressed in a shared base unit.
 const CONVERT = { g: ["g", 1], kg: ["g", 1000], ml: ["ml", 1], dl: ["ml", 100], l: ["ml", 1000] };
 
@@ -117,9 +123,9 @@ const CONVERT = { g: ["g", 1], kg: ["g", 1000], ml: ["ml", 1], dl: ["ml", 100], 
 function load() {
   try {
     const raw = localStorage.getItem(STORE_KEY);
-    if (raw) { const d = JSON.parse(raw); return { dinners: d.dinners || [], log: d.log || [] }; }
+    if (raw) { const d = JSON.parse(raw); return { dinners: d.dinners || [], log: d.log || [], staples: d.staples || [] }; }
   } catch (e) { console.warn(e); }
-  return { dinners: [], log: [] };
+  return { dinners: [], log: [], staples: [] };
 }
 let db = load();
 function save() {
@@ -139,7 +145,7 @@ async function pushCloud() {
   try {
     while (cloudDirty) {
       cloudDirty = false;
-      try { await cloud.set({ dinners: db.dinners, log: db.log }); }
+      try { await cloud.set({ dinners: db.dinners, log: db.log, staples: db.staples }); }
       catch (e) { toast(e && e.code === "quota_exceeded" ? "Lagringen er full" : "Kunne ikke lagre i skyen"); break; }
     }
   } finally { cloudBusy = false; }
@@ -155,12 +161,12 @@ async function initCloud() {
     if (first) {
       first = false; cloud = ref;
       // Seed the cloud copy from this device the first time.
-      if (!snap.exists) { if (db.dinners.length || db.log.length) pushCloud(); return; }
+      if (!snap.exists) { if (db.dinners.length || db.log.length || db.staples.length) pushCloud(); return; }
     }
     if (!snap.exists || cloudBusy) return;
     // Snapshot data is frozen; take a mutable copy.
     const d = JSON.parse(JSON.stringify(snap.data()));
-    db = { dinners: d.dinners || [], log: d.log || [] };
+    db = { dinners: d.dinners || [], log: d.log || [], staples: d.staples || [] };
     try { localStorage.setItem(STORE_KEY, JSON.stringify(db)); } catch (e) {}
     // Don't yank an open editor away from the user; it re-renders on close.
     if (!$("#dlg").open) render(false);
@@ -204,18 +210,20 @@ function findOrCreateDinner(name) {
 function refreshDatalists() {
   $("#dinnerNames").innerHTML = db.dinners.map(d => `<option value="${esc(d.name)}">`).join("");
   const ings = new Set(); db.dinners.forEach(d => d.ingredients.forEach(i => i.name && ings.add(i.name)));
+  db.staples.forEach(i => ings.add(i.name));
   $("#ingNames").innerHTML = [...ings].sort().map(n => `<option value="${esc(n)}">`).join("");
 }
 // Remember which category an ingredient name was last given, to prefill new rows.
 function knownCategory(name) {
   const n = name.trim().toLowerCase();
   for (const d of db.dinners) for (const i of d.ingredients) if (i.name.toLowerCase() === n && i.cat) return i.cat;
+  for (const i of db.staples) if (i.name.toLowerCase() === n && i.cat) return i.cat;
   return "";
 }
 
 // ---------- tabs ----------
 let tab = "log";
-const TITLES = { log: "Middagslogg", dinners: "Middager", shop: "Handleliste", settings: "Data og backup" };
+const TITLES = { log: "Middagslogg", dinners: "Middager", staples: "Faste varer", shop: "Handleliste", settings: "Data og backup" };
 document.querySelectorAll("nav button").forEach(b => b.onclick = () => {
   tab = b.dataset.tab;
   if (tab === "shop") shop.counts = null; // pick up newly logged dinners
@@ -225,7 +233,7 @@ function render(scrollTop = true) {
   document.querySelectorAll("nav button").forEach(b => b.classList.toggle("active", b.dataset.tab === tab));
   $("#title").textContent = TITLES[tab];
   refreshDatalists();
-  ({ log: renderLog, dinners: renderDinners, shop: renderShop, settings: renderSettings })[tab]();
+  ({ log: renderLog, dinners: renderDinners, staples: renderStaples, shop: renderShop, settings: renderSettings })[tab]();
   if (scrollTop) window.scrollTo(0, 0);
 }
 
@@ -366,8 +374,59 @@ function editDinner(id) {
   dlg.showModal();
 }
 
+// ---------- STAPLES (breakfast, packed lunch, etc. per week) ----------
+function renderStaples() {
+  const v = $("#view");
+  const byMeal = {};
+  db.staples.forEach(i => (byMeal[i.meal || "Annet"] ||= []).push(i));
+  v.innerHTML = `
+    <p class="muted" style="margin:0 0 12px">Varer dere bruker hver uke uavhengig av middag – frokost, matpakker, kveldsmat, lørdagsgodt osv.
+      Oppgi hvor mye dere bruker <b>per uke</b>, så regnes det om til hele perioden i handlelisten.</p>
+    <button class="btn block" id="sNew" style="margin:0 0 12px">+ Ny fast vare</button>
+    ${db.staples.length ? MEALS.filter(m => byMeal[m]).map(m => `<h3>${esc(m)}</h3>
+      <div class="card" style="padding:4px 14px"><ul class="list">
+        ${byMeal[m].sort((a, b) => a.name.localeCompare(b.name, "no")).map(i => `
+          <li data-st="${i.id}"><div class="grow"><div>${esc(i.name)}</div>
+          <div class="muted">${i.qty ? `${fmtNum(parseFloat(i.qty))} ${esc(i.unit)} per uke` : "per uke"}</div></div><span class="muted">›</span></li>`).join("")}
+      </ul></div>`).join("")
+    : `<div class="empty">Ingen faste varer ennå.<br>Legg til f.eks. melk, brød, pålegg og lørdagsgodt.</div>`}`;
+  $("#sNew").onclick = () => editStaple(null);
+  v.querySelectorAll("[data-st]").forEach(li => li.onclick = () => editStaple(li.dataset.st));
+}
+let lastMeal = "Frokost";
+function editStaple(id) {
+  const orig = id ? db.staples.find(x => x.id === id) : null;
+  const it = orig ? { ...orig } : { id: uid(), name: "", qty: "", unit: "stk", meal: lastMeal, cat: "" };
+  const dlg = $("#dlg");
+  $("#dlgBody").innerHTML = `
+    <h2>${orig ? "Rediger fast vare" : "Ny fast vare"}</h2>
+    <label>Vare</label><input id="stName" list="ingNames" value="${esc(it.name)}" placeholder="F.eks. Melk" autocomplete="off">
+    <div class="row"><div class="grow"><label>Mengde per uke</label><input id="stQty" inputmode="decimal" value="${esc(it.qty)}" placeholder="F.eks. 6"></div>
+      <div class="grow"><label>Enhet</label><select id="stUnit">${UNITS.map(u => `<option ${u === it.unit ? "selected" : ""}>${u}</option>`).join("")}</select></div></div>
+    <label>Til</label><select id="stMeal">${MEALS.map(m => `<option ${m === it.meal ? "selected" : ""}>${m}</option>`).join("")}</select>
+    <label>Avdeling i butikken</label><select id="stCat"><option value="">Velg…</option>${CATEGORIES.map(c => `<option ${c === it.cat ? "selected" : ""}>${c}</option>`).join("")}</select>
+    ${orig ? `<button type="button" class="btn danger block" id="stDel">Slett vare</button>` : ""}`;
+  $("#dlgFoot").innerHTML = `<button type="button" class="btn secondary" id="stCancel">Avbryt</button><button type="button" class="btn" id="stSave">Lagre</button>`;
+  $("#stName").oninput = () => { if (!$("#stCat").value) { const c = knownCategory($("#stName").value); if (c) $("#stCat").value = c; } };
+  $("#stCancel").onclick = () => dlg.close();
+  $("#stSave").onclick = () => {
+    const name = $("#stName").value.trim();
+    if (!name) return toast("Skriv inn en vare");
+    Object.assign(it, { name, qty: $("#stQty").value.replace(",", ".").trim(), unit: $("#stUnit").value, meal: $("#stMeal").value, cat: $("#stCat").value });
+    lastMeal = it.meal;
+    if (orig) Object.assign(orig, it); else db.staples.push(it);
+    save(); dlg.close(); toast("Lagret"); render(false);
+  };
+  const del = $("#stDel");
+  if (del) del.onclick = async () => {
+    if (!await ask(`Slette «${orig.name}»?`, "Slett")) return;
+    db.staples = db.staples.filter(x => x.id !== orig.id); save(); dlg.close(); render(false);
+  };
+  dlg.showModal();
+}
+
 // ---------- SHOPPING LIST ----------
-const shop = { mode: "month", from: "", to: "", counts: null, checked: new Set(), factor: 1 };
+const shop = { mode: "month", from: "", to: "", counts: null, checked: new Set(), factor: 1, weeks: null, staples: true };
 function periodFor(mode) {
   const t = todayISO();
   if (mode === "week") return [addDays(t, -6), t];
@@ -379,23 +438,25 @@ function countsInPeriod(from, to) {
   db.log.forEach(e => { if (e.date >= from && e.date <= to) c[e.dinnerId] = (c[e.dinnerId] || 0) + 1; });
   return c;
 }
-function aggregate(counts) {
+function aggregate(counts, weeks) {
   const items = {};
   const missing = [];
+  const add = (i, n, source) => {
+    const q = parseFloat(i.qty);
+    const conv = CONVERT[i.unit];
+    const unit = conv ? conv[0] : i.unit;
+    const key = i.name.toLowerCase() + "|" + (isNaN(q) ? "" : unit);
+    const it = items[key] ||= { name: i.name, unit, qty: 0, hasQty: !isNaN(q), cat: i.cat || "Annet", dinners: new Set() };
+    if (!isNaN(q)) it.qty += q * n * (conv ? conv[1] : 1);
+    if (i.cat && it.cat === "Annet") it.cat = i.cat;
+    it.dinners.add(source);
+  };
+  if (weeks) db.staples.forEach(i => add(i, weeks, i.meal || "Annet"));
   for (const [id, n] of Object.entries(counts)) {
     if (!n) continue;
     const d = dinnerById(id); if (!d) continue;
     if (!d.ingredients.length) { missing.push(d.name); continue; }
-    for (const i of d.ingredients) {
-      const q = parseFloat(i.qty);
-      const conv = CONVERT[i.unit];
-      const unit = conv ? conv[0] : i.unit;
-      const key = i.name.toLowerCase() + "|" + (isNaN(q) ? "" : unit);
-      const it = items[key] ||= { name: i.name, unit, qty: 0, hasQty: !isNaN(q), cat: i.cat || "Annet", dinners: new Set() };
-      if (!isNaN(q)) it.qty += q * n * (conv ? conv[1] : 1);
-      if (i.cat && it.cat === "Annet") it.cat = i.cat;
-      it.dinners.add(d.name);
-    }
+    for (const i of d.ingredients) add(i, n, d.name);
   }
   return { items: Object.values(items), missing };
 }
@@ -413,7 +474,10 @@ function renderShop() {
   if (!shop.counts) shop.counts = countsInPeriod(from, to);
   const counts = shop.counts;
   const scaled = Object.fromEntries(Object.entries(counts).map(([k, n]) => [k, n * shop.factor]));
-  const { items, missing } = aggregate(scaled);
+  const days = Math.round((new Date(to + "T12:00") - new Date(from + "T12:00")) / 864e5) + 1;
+  const weeks = shop.weeks ?? Math.max(1, Math.round(days * shop.factor / 7));
+  const useStaples = shop.staples && db.staples.length > 0;
+  const { items, missing } = aggregate(scaled, useStaples ? weeks : 0);
   const byCat = {};
   items.forEach(it => (byCat[it.cat] ||= []).push(it));
   const cats = Object.keys(byCat).sort((a, b) => CATEGORIES.indexOf(a) - CATEGORIES.indexOf(b));
@@ -451,6 +515,15 @@ function renderShop() {
           ${addable.sort((a, b) => a.name.localeCompare(b.name, "no")).map(d => `<option value="${d.id}">${esc(d.name)}</option>`).join("")}</select></div>` : ""}
     </div>
 
+    <div class="card">
+      ${db.staples.length ? `<div class="row">
+        <input type="checkbox" id="useSt" ${shop.staples ? "checked" : ""} style="width:22px;height:22px;flex:none;accent-color:var(--accent)">
+        <label for="useSt" class="grow" style="margin:0;font-size:16px;color:var(--text)"><b>Faste varer</b> (${db.staples.length})</label>
+        ${shop.staples ? `<span class="muted">Uker</span><div class="stepper"><button data-w="-1">−</button><b>${weeks}</b><button data-w="1">+</button></div>` : ""}</div>
+        <p class="muted" style="margin:6px 0 0">Frokost, matpakke, kveldsmat, lørdagsgodt m.m. ganget med antall uker.</p>`
+      : `<p class="muted" style="margin:0">Trenger du også varer til frokost, matpakker, kveldsmat eller lørdagsgodt? Legg dem inn under <b>Faste varer</b>.</p>`}
+    </div>
+
     ${missing.length ? `<div class="card muted">⚠️ Disse middagene har ingen varer registrert ennå: <b>${missing.map(esc).join(", ")}</b>. Legg dem til under «Middager».</div>` : ""}
 
     <div class="card">
@@ -458,7 +531,7 @@ function renderShop() {
       ${items.length ? `
         <div class="row" style="margin-top:10px">
           <button class="btn grow" id="copy">📋 Kopier</button>
-          ${navigator.share ? `<button class="btn secondary grow" id="share">Del</button>` : ""}
+          <button class="btn secondary grow" id="share">Del / vis tekst</button>
         </div>
         ${cats.map(c => `<h3>${esc(c)}</h3><ul class="list shop">
           ${byCat[c].map(it => { const k = it.name.toLowerCase() + "|" + it.unit; return `
@@ -470,11 +543,14 @@ function renderShop() {
       : `<div class="empty">Ingen varer å vise.</div>`}
     </div>`;
 
-  v.querySelectorAll("#seg button").forEach(b => b.onclick = () => { shop.mode = b.dataset.m; shop.counts = null; renderShop(); });
+  v.querySelectorAll("#seg button").forEach(b => b.onclick = () => { shop.mode = b.dataset.m; shop.counts = null; shop.weeks = null; renderShop(); });
   const sf = $("#sFrom"), st = $("#sTo");
-  if (sf) { sf.onchange = () => { shop.from = sf.value; shop.counts = null; renderShop(); };
-            st.onchange = () => { shop.to = st.value; shop.counts = null; renderShop(); }; }
-  v.querySelectorAll("[data-f]").forEach(b => b.onclick = () => { shop.factor = Math.max(1, shop.factor + +b.dataset.f); renderShop(); });
+  if (sf) { sf.onchange = () => { shop.from = sf.value; shop.counts = null; shop.weeks = null; renderShop(); };
+            st.onchange = () => { shop.to = st.value; shop.counts = null; shop.weeks = null; renderShop(); }; }
+  v.querySelectorAll("[data-f]").forEach(b => b.onclick = () => { shop.factor = Math.max(1, shop.factor + +b.dataset.f); shop.weeks = null; renderShop(); });
+  v.querySelectorAll("[data-w]").forEach(b => b.onclick = () => { shop.weeks = Math.max(1, weeks + +b.dataset.w); renderShop(); });
+  const useSt = $("#useSt");
+  if (useSt) useSt.onchange = () => { shop.staples = useSt.checked; renderShop(); };
   v.querySelectorAll("[data-c]").forEach(b => b.onclick = () => {
     const n = (shop.counts[b.dataset.c] || 0) + +b.dataset.d;
     if (n <= 0) delete shop.counts[b.dataset.c]; else shop.counts[b.dataset.c] = n;
@@ -488,7 +564,7 @@ function renderShop() {
   });
 
   const text = () => {
-    const lines = [`Handleliste (${totalDinners * shop.factor} middager)`];
+    const lines = [`Handleliste (${totalDinners * shop.factor} middager${useStaples ? ` + faste varer for ${weeks} uker` : ""})`];
     cats.forEach(c => {
       const rows = byCat[c].filter(it => !shop.checked.has(it.name.toLowerCase() + "|" + it.unit));
       if (!rows.length) return;
@@ -500,15 +576,30 @@ function renderShop() {
   const copy = $("#copy");
   if (copy) copy.onclick = async () => {
     try { await navigator.clipboard.writeText(text()); toast("Handlelisten er kopiert"); }
-    catch { fallbackCopy(text()); }
+    catch { if (fallbackCopy(text())) toast("Handlelisten er kopiert"); else showText(text()); }
   };
+  // Sharing is often blocked when the page runs inside another app (e.g. claude.ai on iPhone);
+  // then show the text so it can be copied by hand.
   const share = $("#share");
-  if (share) share.onclick = () => navigator.share({ title: "Handleliste", text: text() }).catch(() => {});
+  if (share) share.onclick = async () => {
+    if (navigator.share) {
+      try { await navigator.share({ title: "Handleliste", text: text() }); return; }
+      catch (e) { if (e && e.name === "AbortError") return; }
+    }
+    showText(text());
+  };
 }
 function fallbackCopy(t) {
-  const ta = document.createElement("textarea"); ta.value = t; document.body.appendChild(ta); ta.select();
-  try { document.execCommand("copy"); toast("Handlelisten er kopiert"); } catch { toast("Kunne ikke kopiere"); }
-  ta.remove();
+  const ta = document.createElement("textarea"); ta.value = t; ta.setAttribute("readonly", "");
+  ta.style.position = "fixed"; ta.style.opacity = "0"; document.body.appendChild(ta);
+  ta.select(); ta.setSelectionRange(0, t.length);
+  let ok = false; try { ok = document.execCommand("copy"); } catch {}
+  ta.remove(); return ok;
+}
+function showText(t) {
+  const d = $("#txt"), ta = $("#txtArea");
+  ta.value = t; $("#txtClose").onclick = () => d.close();
+  d.showModal(); ta.focus(); ta.setSelectionRange(0, t.length);
 }
 
 // ---------- SETTINGS / BACKUP ----------
@@ -516,7 +607,7 @@ function renderSettings() {
   $("#view").innerHTML = `
     <div class="card">
       <h2>Oversikt</h2>
-      <p class="muted" style="margin:0">${db.dinners.length} middager · ${db.log.length} loggføringer</p>
+      <p class="muted" style="margin:0">${db.dinners.length} middager · ${db.log.length} loggføringer · ${db.staples.length} faste varer</p>
     </div>
     <div class="card">
       <h2>Backup</h2>
@@ -548,12 +639,12 @@ function renderSettings() {
       const d = JSON.parse(await f.text());
       if (!Array.isArray(d.dinners) || !Array.isArray(d.log)) throw new Error();
       if (!await ask(`Erstatte dagens data med backupen (${d.dinners.length} middager, ${d.log.length} loggføringer)?`, "Erstatt")) return;
-      db = { dinners: d.dinners, log: d.log }; save(); shop.counts = null; toast("Backup gjenopprettet"); render();
+      db = { dinners: d.dinners, log: d.log, staples: d.staples || [] }; save(); shop.counts = null; toast("Backup gjenopprettet"); render();
     } catch { toast("Ugyldig backup-fil"); }
   };
   $("#wipe").onclick = async () => {
     if (!await ask("Slette ALLE middager og loggføringer? Dette kan ikke angres.", "Slett alt")) return;
-    db = { dinners: [], log: [] }; save(); shop.counts = null; render();
+    db = { dinners: [], log: [], staples: [] }; save(); shop.counts = null; render();
   };
 }
 
