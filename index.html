@@ -158,7 +158,8 @@ async function initCloud() {
       if (!snap.exists) { if (db.dinners.length || db.log.length) pushCloud(); return; }
     }
     if (!snap.exists || cloudBusy) return;
-    const d = snap.data();
+    // Snapshot data is frozen; take a mutable copy.
+    const d = JSON.parse(JSON.stringify(snap.data()));
     db = { dinners: d.dinners || [], log: d.log || [] };
     try { localStorage.setItem(STORE_KEY, JSON.stringify(db)); } catch (e) {}
     // Don't yank an open editor away from the user; it re-renders on close.
@@ -188,7 +189,11 @@ function fmtDate(iso) {
 }
 function fmtNum(n) { return (Math.round(n * 100) / 100).toLocaleString("no-NO"); }
 const dinnerById = id => db.dinners.find(d => d.id === id);
-function toast(msg) { const t = $("#toast"); t.textContent = msg; t.classList.add("show"); clearTimeout(toast.t); toast.t = setTimeout(() => t.classList.remove("show"), 1800); }
+function toast(msg) {
+  const t = $("#toast");
+  // Keep the toast above an open modal dialog (top layer).
+  const open = [...document.querySelectorAll("dialog")].find(d => d.open);
+  (open || document.body).appendChild(t); t.textContent = msg; t.classList.add("show"); clearTimeout(toast.t); toast.t = setTimeout(() => t.classList.remove("show"), 1800); }
 
 function findOrCreateDinner(name) {
   name = name.trim();
