@@ -16,10 +16,14 @@
     --line: #e3e2dc; --accent: #2f6f4f; --accent-soft: #e3efe8; --danger: #b3412f;
   }
   @media (prefers-color-scheme: dark) {
-    :root {
+    :root:not([data-theme="light"]) {
       --bg: #141715; --card: #1d211f; --text: #e9ece9; --muted: #9aa39d;
       --line: #2e3430; --accent: #6fbf94; --accent-soft: #23332a; --danger: #e07a68;
     }
+  }
+  :root[data-theme="dark"] {
+    --bg: #141715; --card: #1d211f; --text: #e9ece9; --muted: #9aa39d;
+    --line: #2e3430; --accent: #6fbf94; --accent-soft: #23332a; --danger: #e07a68;
   }
   * { box-sizing: border-box; }
   html, body { margin: 0; background: var(--bg); color: var(--text);
@@ -94,6 +98,7 @@
 </nav>
 
 <dialog id="dlg"><form method="dialog" id="dlgForm"><div class="dlg-body" id="dlgBody"></div><div class="dlg-foot" id="dlgFoot"></div></form></dialog>
+<dialog id="cfm"><div class="dlg-body" id="cfmText"></div><div class="dlg-foot"><button type="button" class="btn secondary" id="cfmNo">Avbryt</button><button type="button" class="btn" id="cfmYes">OK</button></div></dialog>
 <div class="toast" id="toast"></div>
 
 <datalist id="dinnerNames"></datalist>
@@ -119,7 +124,56 @@ function load() {
 let db = load();
 function save() {
   try { localStorage.setItem(STORE_KEY, JSON.stringify(db)); }
-  catch (e) { toast("Kunne ikke lagre – sjekk lagringsplass"); }
+  catch (e) { if (!cloud) toast("Kunne ikke lagre – sjekk lagringsplass"); }
+  pushCloud();
+}
+
+// When opened as a claude.ai Artifact, the data is also kept in the artifact's
+// database so it survives across devices. Elsewhere this stays inactive.
+let cloud = null, cloudBusy = false, cloudDirty = false;
+async function pushCloud() {
+  if (!cloud) return;
+  cloudDirty = true;
+  if (cloudBusy) return;
+  cloudBusy = true;
+  try {
+    while (cloudDirty) {
+      cloudDirty = false;
+      try { await cloud.set({ dinners: db.dinners, log: db.log }); }
+      catch (e) { toast(e && e.code === "quota_exceeded" ? "Lagringen er full" : "Kunne ikke lagre i skyen"); break; }
+    }
+  } finally { cloudBusy = false; }
+}
+async function initCloud() {
+  if (!window.claude || !window.claude.use) return;
+  const store = await window.claude.use("db").catch(() => null);
+  if (!store) return;
+  const ref = store.doc("app/state");
+  let first = true;
+  ref.onSnapshot(snap => {
+    if (snap.hasPendingWrites) return;
+    if (first) {
+      first = false; cloud = ref;
+      // Seed the cloud copy from this device the first time.
+      if (!snap.exists) { if (db.dinners.length || db.log.length) pushCloud(); return; }
+    }
+    if (!snap.exists || cloudBusy) return;
+    const d = snap.data();
+    db = { dinners: d.dinners || [], log: d.log || [] };
+    try { localStorage.setItem(STORE_KEY, JSON.stringify(db)); } catch (e) {}
+    // Don't yank an open editor away from the user; it re-renders on close.
+    if (!$("#dlg").open) render(false);
+  }, () => { cloud = null; });
+}
+function ask(text, okLabel = "OK") {
+  const d = $("#cfm");
+  $("#cfmText").textContent = text; $("#cfmYes").textContent = okLabel;
+  d.showModal();
+  return new Promise(res => {
+    $("#cfmYes").onclick = () => { d.close(); res(true); };
+    $("#cfmNo").onclick = () => { d.close(); res(false); };
+    d.oncancel = () => res(false);
+  });
 }
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 
@@ -162,12 +216,12 @@ document.querySelectorAll("nav button").forEach(b => b.onclick = () => {
   if (tab === "shop") shop.counts = null; // pick up newly logged dinners
   render();
 });
-function render() {
+function render(scrollTop = true) {
   document.querySelectorAll("nav button").forEach(b => b.classList.toggle("active", b.dataset.tab === tab));
   $("#title").textContent = TITLES[tab];
   refreshDatalists();
   ({ log: renderLog, dinners: renderDinners, shop: renderShop, settings: renderSettings })[tab]();
-  window.scrollTo(0, 0);
+  if (scrollTop) window.scrollTo(0, 0);
 }
 
 // ---------- LOG ----------
@@ -204,8 +258,8 @@ function renderLog() {
     // Next entry is most likely the following day.
     render(); $("#logDate").value = date === todayISO() ? todayISO() : addDays(date, 1);
   };
-  v.querySelectorAll("[data-del-log]").forEach(b => b.onclick = () => {
-    if (!confirm("Slette denne loggføringen?")) return;
+  v.querySelectorAll("[data-del-log]").forEach(b => b.onclick = async () => {
+    if (!await ask("Slette denne loggføringen?", "Slett")) return;
     db.log = db.log.filter(e => e.id !== b.dataset.delLog); save(); render();
   });
 }
@@ -294,9 +348,9 @@ function editDinner(id) {
       save(); dlg.close(); toast("Lagret"); render();
     };
     const del = $("#dDel");
-    if (del) del.onclick = () => {
+    if (del) del.onclick = async () => {
       const n = db.log.filter(e => e.dinnerId === d.id).length;
-      if (!confirm(n ? `Slette «${orig.name}»? Den er logget ${n} gang(er), og disse loggføringene slettes også.` : `Slette «${orig.name}»?`)) return;
+      if (!await ask(n ? `Slette «${orig.name}»? Den er logget ${n} gang(er), og disse loggføringene slettes også.` : `Slette «${orig.name}»?`, "Slett")) return;
       db.dinners = db.dinners.filter(x => x.id !== d.id);
       db.log = db.log.filter(e => e.dinnerId !== d.id);
       save(); dlg.close(); render();
@@ -461,7 +515,7 @@ function renderSettings() {
     </div>
     <div class="card">
       <h2>Backup</h2>
-      <p class="muted">Dataene lagres kun på denne telefonen, i nettleseren. Ta backup jevnlig, og bruk den for å flytte dataene til en annen telefon.</p>
+      <p class="muted">${cloud ? "Dataene lagres i skyen og er tilgjengelige på alle enhetene dine." : "Dataene lagres kun på denne telefonen, i nettleseren."} Last ned backup innimellom for sikkerhets skyld.</p>
       <button class="btn block" id="exp">⬇️ Last ned backup</button>
       <button class="btn secondary block" id="impBtn">⬆️ Gjenopprett fra backup</button>
       <input type="file" id="imp" accept="application/json,.json" hidden>
@@ -474,10 +528,13 @@ function renderSettings() {
     <div class="card">
       <button class="btn danger block" id="wipe">Slett alle data</button>
     </div>`;
-  $("#exp").onclick = () => {
-    const blob = new Blob([JSON.stringify(db, null, 2)], { type: "application/json" });
+  $("#exp").onclick = async () => {
+    const json = JSON.stringify(db, null, 2), filename = `middagslogg-${todayISO()}.json`;
+    const dl = window.claude && window.claude.use ? await window.claude.use("downloads").catch(() => null) : null;
+    if (dl) { try { await dl.save({ filename, data: json }); } catch (e) {} return; }
+    const blob = new Blob([json], { type: "application/json" });
     const a = document.createElement("a"); a.href = URL.createObjectURL(blob);
-    a.download = `middagslogg-${todayISO()}.json`; a.click(); URL.revokeObjectURL(a.href);
+    a.download = filename; a.click(); URL.revokeObjectURL(a.href);
   };
   $("#impBtn").onclick = () => $("#imp").click();
   $("#imp").onchange = async e => {
@@ -485,12 +542,12 @@ function renderSettings() {
     try {
       const d = JSON.parse(await f.text());
       if (!Array.isArray(d.dinners) || !Array.isArray(d.log)) throw new Error();
-      if (!confirm(`Erstatte dagens data med backupen (${d.dinners.length} middager, ${d.log.length} loggføringer)?`)) return;
+      if (!await ask(`Erstatte dagens data med backupen (${d.dinners.length} middager, ${d.log.length} loggføringer)?`, "Erstatt")) return;
       db = { dinners: d.dinners, log: d.log }; save(); shop.counts = null; toast("Backup gjenopprettet"); render();
     } catch { toast("Ugyldig backup-fil"); }
   };
-  $("#wipe").onclick = () => {
-    if (!confirm("Slette ALLE middager og loggføringer? Dette kan ikke angres.")) return;
+  $("#wipe").onclick = async () => {
+    if (!await ask("Slette ALLE middager og loggføringer? Dette kan ikke angres.", "Slett alt")) return;
     db = { dinners: [], log: [] }; save(); shop.counts = null; render();
   };
 }
@@ -499,6 +556,7 @@ function renderSettings() {
 if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
 if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
 render();
+initCloud();
 </script>
 </body>
 </html>
