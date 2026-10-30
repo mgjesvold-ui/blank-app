@@ -1,0 +1,504 @@
+<!doctype html>
+<html lang="no">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#2f6f4f">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Middager">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon-192.png">
+<title>Middagslogg</title>
+<style>
+  :root {
+    --bg: #f6f5f1; --card: #ffffff; --text: #1f2421; --muted: #6b726d;
+    --line: #e3e2dc; --accent: #2f6f4f; --accent-soft: #e3efe8; --danger: #b3412f;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #141715; --card: #1d211f; --text: #e9ece9; --muted: #9aa39d;
+      --line: #2e3430; --accent: #6fbf94; --accent-soft: #23332a; --danger: #e07a68;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--text);
+    font: 16px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+  header { position: sticky; top: 0; z-index: 5; background: var(--bg);
+    padding: calc(env(safe-area-inset-top) + 12px) 16px 8px; border-bottom: 1px solid var(--line); }
+  header h1 { margin: 0; font-size: 20px; }
+  main { padding: 12px 16px calc(env(safe-area-inset-bottom) + 90px); max-width: 640px; margin: 0 auto; }
+  nav { position: fixed; bottom: 0; left: 0; right: 0; z-index: 5; display: flex;
+    background: var(--card); border-top: 1px solid var(--line);
+    padding-bottom: env(safe-area-inset-bottom); }
+  nav button { flex: 1; border: 0; background: none; color: var(--muted); padding: 10px 4px 12px;
+    font-size: 12px; display: flex; flex-direction: column; align-items: center; gap: 2px; }
+  nav button span { font-size: 22px; }
+  nav button.active { color: var(--accent); font-weight: 600; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 14px; margin-bottom: 12px; }
+  h2 { font-size: 17px; margin: 0 0 10px; }
+  h3 { font-size: 13px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin: 16px 0 6px; }
+  label { display: block; font-size: 13px; color: var(--muted); margin: 8px 0 4px; }
+  input, select, textarea { width: 100%; font: inherit; color: var(--text); background: var(--bg);
+    border: 1px solid var(--line); border-radius: 8px; padding: 10px; }
+  textarea { min-height: 60px; }
+  .row { display: flex; gap: 8px; align-items: center; }
+  .row > * { min-width: 0; }
+  .grow { flex: 1; }
+  button.btn { font: inherit; border: 0; border-radius: 10px; padding: 11px 14px; background: var(--accent);
+    color: #fff; font-weight: 600; }
+  button.btn.secondary { background: var(--accent-soft); color: var(--accent); }
+  button.btn.danger { background: none; color: var(--danger); border: 1px solid var(--line); }
+  button.btn.small { padding: 7px 10px; font-size: 14px; }
+  button.btn.block { width: 100%; margin-top: 10px; }
+  button.icon { border: 0; background: none; color: var(--muted); font-size: 20px; padding: 6px 8px; }
+  .list { list-style: none; margin: 0; padding: 0; }
+  .list li { display: flex; align-items: center; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--line); }
+  .list li:last-child { border-bottom: 0; }
+  .muted { color: var(--muted); font-size: 14px; }
+  .pill { display: inline-block; background: var(--accent-soft); color: var(--accent); border-radius: 999px;
+    padding: 2px 8px; font-size: 12px; font-weight: 600; }
+  .seg { display: flex; background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 3px; gap: 3px; }
+  .seg button { flex: 1; border: 0; background: none; color: var(--muted); font: inherit; font-size: 14px; padding: 8px 4px; border-radius: 8px; }
+  .seg button.active { background: var(--card); color: var(--text); font-weight: 600; box-shadow: 0 1px 2px rgba(0,0,0,.08); }
+  .ing-row { display: grid; grid-template-columns: 1fr 64px 72px 34px; gap: 6px; margin-bottom: 6px; }
+  .ing-row input, .ing-row select { padding: 8px 6px; font-size: 15px; }
+  .ing-cat { grid-column: 1 / 4; }
+  .ing-block { border-bottom: 1px dashed var(--line); padding-bottom: 6px; margin-bottom: 8px; }
+  .stepper { display: flex; align-items: center; gap: 4px; }
+  .stepper button { width: 32px; height: 32px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg); color: var(--text); font-size: 18px; }
+  .stepper b { min-width: 22px; text-align: center; }
+  .shop li.done .name { text-decoration: line-through; color: var(--muted); }
+  .shop input[type=checkbox] { width: 22px; height: 22px; flex: none; accent-color: var(--accent); }
+  .empty { text-align: center; color: var(--muted); padding: 24px 8px; }
+  .toast { position: fixed; left: 50%; bottom: 90px; transform: translateX(-50%); background: var(--text); color: var(--bg);
+    padding: 10px 16px; border-radius: 999px; font-size: 14px; opacity: 0; transition: opacity .2s; pointer-events: none; z-index: 20; }
+  .toast.show { opacity: 1; }
+  dialog { border: 0; border-radius: 14px; padding: 0; width: min(560px, calc(100vw - 24px)); max-height: 90vh;
+    background: var(--card); color: var(--text); }
+  dialog::backdrop { background: rgba(0,0,0,.4); }
+  dialog .dlg-body { padding: 16px; overflow: auto; max-height: calc(90vh - 64px); }
+  dialog .dlg-foot { display: flex; gap: 8px; padding: 12px 16px; border-top: 1px solid var(--line); }
+  dialog .dlg-foot .btn { flex: 1; }
+</style>
+</head>
+<body>
+<header><h1 id="title">Middagslogg</h1></header>
+<main id="view"></main>
+
+<nav>
+  <button data-tab="log" class="active"><span>🍽️</span>Logg</button>
+  <button data-tab="dinners"><span>📖</span>Middager</button>
+  <button data-tab="shop"><span>🛒</span>Handleliste</button>
+  <button data-tab="settings"><span>⚙️</span>Data</button>
+</nav>
+
+<dialog id="dlg"><form method="dialog" id="dlgForm"><div class="dlg-body" id="dlgBody"></div><div class="dlg-foot" id="dlgFoot"></div></form></dialog>
+<div class="toast" id="toast"></div>
+
+<datalist id="dinnerNames"></datalist>
+<datalist id="ingNames"></datalist>
+
+<script>
+"use strict";
+const STORE_KEY = "middagslogg.v1";
+const UNITS = ["stk", "g", "kg", "ml", "dl", "l", "ss", "ts", "pk", "boks", "bunt", "fedd"];
+const CATEGORIES = ["Frukt og grønt", "Kjøtt", "Fisk", "Meieri og egg", "Brød og bakevarer",
+  "Tørrvarer", "Hermetikk", "Krydder og sauser", "Frysevarer", "Annet"];
+// Units that can be summed together, expressed in a shared base unit.
+const CONVERT = { g: ["g", 1], kg: ["g", 1000], ml: ["ml", 1], dl: ["ml", 100], l: ["ml", 1000] };
+
+// ---------- storage ----------
+function load() {
+  try {
+    const raw = localStorage.getItem(STORE_KEY);
+    if (raw) { const d = JSON.parse(raw); return { dinners: d.dinners || [], log: d.log || [] }; }
+  } catch (e) { console.warn(e); }
+  return { dinners: [], log: [] };
+}
+let db = load();
+function save() {
+  try { localStorage.setItem(STORE_KEY, JSON.stringify(db)); }
+  catch (e) { toast("Kunne ikke lagre – sjekk lagringsplass"); }
+}
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+
+// ---------- helpers ----------
+const $ = (s, el = document) => el.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const todayISO = () => isoDate(new Date());
+function isoDate(d) { const z = n => String(n).padStart(2, "0"); return `${d.getFullYear()}-${z(d.getMonth() + 1)}-${z(d.getDate())}`; }
+function addDays(iso, n) { const d = new Date(iso + "T12:00"); d.setDate(d.getDate() + n); return isoDate(d); }
+function fmtDate(iso) {
+  return new Date(iso + "T12:00").toLocaleDateString("no-NO", { weekday: "short", day: "numeric", month: "short" });
+}
+function fmtNum(n) { return (Math.round(n * 100) / 100).toLocaleString("no-NO"); }
+const dinnerById = id => db.dinners.find(d => d.id === id);
+function toast(msg) { const t = $("#toast"); t.textContent = msg; t.classList.add("show"); clearTimeout(toast.t); toast.t = setTimeout(() => t.classList.remove("show"), 1800); }
+
+function findOrCreateDinner(name) {
+  name = name.trim();
+  let d = db.dinners.find(x => x.name.toLowerCase() === name.toLowerCase());
+  if (!d) { d = { id: uid(), name, ingredients: [], notes: "" }; db.dinners.push(d); }
+  return d;
+}
+function refreshDatalists() {
+  $("#dinnerNames").innerHTML = db.dinners.map(d => `<option value="${esc(d.name)}">`).join("");
+  const ings = new Set(); db.dinners.forEach(d => d.ingredients.forEach(i => i.name && ings.add(i.name)));
+  $("#ingNames").innerHTML = [...ings].sort().map(n => `<option value="${esc(n)}">`).join("");
+}
+// Remember which category an ingredient name was last given, to prefill new rows.
+function knownCategory(name) {
+  const n = name.trim().toLowerCase();
+  for (const d of db.dinners) for (const i of d.ingredients) if (i.name.toLowerCase() === n && i.cat) return i.cat;
+  return "";
+}
+
+// ---------- tabs ----------
+let tab = "log";
+const TITLES = { log: "Middagslogg", dinners: "Middager", shop: "Handleliste", settings: "Data og backup" };
+document.querySelectorAll("nav button").forEach(b => b.onclick = () => {
+  tab = b.dataset.tab;
+  if (tab === "shop") shop.counts = null; // pick up newly logged dinners
+  render();
+});
+function render() {
+  document.querySelectorAll("nav button").forEach(b => b.classList.toggle("active", b.dataset.tab === tab));
+  $("#title").textContent = TITLES[tab];
+  refreshDatalists();
+  ({ log: renderLog, dinners: renderDinners, shop: renderShop, settings: renderSettings })[tab]();
+  window.scrollTo(0, 0);
+}
+
+// ---------- LOG ----------
+function renderLog() {
+  const v = $("#view");
+  const sorted = [...db.log].sort((a, b) => b.date.localeCompare(a.date));
+  const groups = {};
+  sorted.forEach(e => { const m = e.date.slice(0, 7); (groups[m] ||= []).push(e); });
+  v.innerHTML = `
+    <div class="card">
+      <h2>Hva spiste dere?</h2>
+      <label for="logDate">Dato</label>
+      <input type="date" id="logDate" value="${todayISO()}">
+      <label for="logDinner">Middag</label>
+      <input id="logDinner" list="dinnerNames" placeholder="F.eks. Taco" autocomplete="off">
+      <button class="btn block" id="logAdd">Logg middag</button>
+    </div>
+    ${sorted.length ? Object.entries(groups).map(([m, items]) => `
+      <h3>${esc(new Date(m + "-15").toLocaleDateString("no-NO", { month: "long", year: "numeric" }))} · ${items.length}</h3>
+      <div class="card" style="padding:4px 14px"><ul class="list">
+        ${items.map(e => { const d = dinnerById(e.dinnerId); return `
+          <li><div class="grow"><div>${esc(d ? d.name : "(slettet middag)")}</div>
+            <div class="muted">${fmtDate(e.date)}${d && !d.ingredients.length ? ' · <span style="color:var(--danger)">mangler varer</span>' : ""}</div></div>
+            <button class="icon" data-del-log="${e.id}" aria-label="Slett">✕</button></li>`; }).join("")}
+      </ul></div>`).join("")
+    : `<div class="empty">Ingen middager logget ennå.<br>Start med å logge dagens middag!</div>`}`;
+
+  $("#logAdd").onclick = () => {
+    const name = $("#logDinner").value.trim(), date = $("#logDate").value;
+    if (!name || !date) return toast("Fyll inn dato og middag");
+    const d = findOrCreateDinner(name);
+    db.log.push({ id: uid(), date, dinnerId: d.id });
+    save(); toast(`«${d.name}» logget`);
+    // Next entry is most likely the following day.
+    render(); $("#logDate").value = date === todayISO() ? todayISO() : addDays(date, 1);
+  };
+  v.querySelectorAll("[data-del-log]").forEach(b => b.onclick = () => {
+    if (!confirm("Slette denne loggføringen?")) return;
+    db.log = db.log.filter(e => e.id !== b.dataset.delLog); save(); render();
+  });
+}
+
+// ---------- DINNERS ----------
+let dinnerFilter = "";
+function renderDinners() {
+  const v = $("#view");
+  const counts = {}; db.log.forEach(e => counts[e.dinnerId] = (counts[e.dinnerId] || 0) + 1);
+  const list = db.dinners
+    .filter(d => d.name.toLowerCase().includes(dinnerFilter.toLowerCase()))
+    .sort((a, b) => (counts[b.id] || 0) - (counts[a.id] || 0) || a.name.localeCompare(b.name, "no"));
+  v.innerHTML = `
+    <div class="row" style="margin-bottom:12px">
+      <input class="grow" id="dSearch" placeholder="Søk…" value="${esc(dinnerFilter)}">
+      <button class="btn" id="dNew">+ Ny</button>
+    </div>
+    ${list.length ? `<div class="card" style="padding:4px 14px"><ul class="list">
+      ${list.map(d => `<li data-edit="${d.id}">
+        <div class="grow"><div>${esc(d.name)}</div>
+        <div class="muted">${d.ingredients.length ? d.ingredients.length + " varer" : '<span style="color:var(--danger)">Legg til varer</span>'}</div></div>
+        <span class="pill">${counts[d.id] || 0}×</span><span class="muted">›</span></li>`).join("")}
+    </ul></div>` : `<div class="empty">${db.dinners.length ? "Ingen treff." : "Ingen middager ennå. Middager du logger dukker opp her, så kan du legge til varene de trenger."}</div>`}`;
+  const s = $("#dSearch");
+  s.oninput = () => { dinnerFilter = s.value; const pos = s.selectionStart; renderDinners(); const n = $("#dSearch"); n.focus(); n.setSelectionRange(pos, pos); };
+  $("#dNew").onclick = () => editDinner(null);
+  v.querySelectorAll("[data-edit]").forEach(li => li.onclick = () => editDinner(li.dataset.edit));
+}
+
+function editDinner(id) {
+  const orig = id ? dinnerById(id) : null;
+  const d = orig ? JSON.parse(JSON.stringify(orig)) : { id: uid(), name: "", ingredients: [], notes: "" };
+  if (!d.ingredients.length) d.ingredients.push({ name: "", qty: "", unit: "stk", cat: "" });
+  const dlg = $("#dlg");
+
+  function ingHTML() {
+    return d.ingredients.map((i, k) => `<div class="ing-block">
+      <div class="ing-row">
+        <input data-k="${k}" data-f="name" list="ingNames" placeholder="Vare" value="${esc(i.name)}" autocomplete="off">
+        <input data-k="${k}" data-f="qty" inputmode="decimal" placeholder="Ant." value="${esc(i.qty)}">
+        <select data-k="${k}" data-f="unit">${UNITS.map(u => `<option ${u === i.unit ? "selected" : ""}>${u}</option>`).join("")}</select>
+        <button type="button" class="icon" data-rm="${k}" aria-label="Fjern">✕</button>
+        <select class="ing-cat" data-k="${k}" data-f="cat"><option value="">Avdeling…</option>
+          ${CATEGORIES.map(c => `<option ${c === i.cat ? "selected" : ""}>${c}</option>`).join("")}</select>
+      </div></div>`).join("");
+  }
+  function draw() {
+    $("#dlgBody").innerHTML = `
+      <h2>${orig ? "Rediger middag" : "Ny middag"}</h2>
+      <label>Navn</label><input id="dName" value="${esc(d.name)}" placeholder="F.eks. Spaghetti bolognese">
+      <h3>Varer som trengs</h3>
+      <div id="ings">${ingHTML()}</div>
+      <button type="button" class="btn secondary small" id="addIng">+ Legg til vare</button>
+      <label>Notater / oppskrift</label><textarea id="dNotes">${esc(d.notes)}</textarea>
+      ${orig ? `<button type="button" class="btn danger block" id="dDel">Slett middag</button>` : ""}`;
+    $("#dlgFoot").innerHTML = `<button type="button" class="btn secondary" id="dCancel">Avbryt</button><button type="button" class="btn" id="dSave">Lagre</button>`;
+    bind();
+  }
+  function bind() {
+    $("#dName").oninput = e => d.name = e.target.value;
+    $("#dNotes").oninput = e => d.notes = e.target.value;
+    $("#ings").querySelectorAll("[data-f]").forEach(el => {
+      el.oninput = el.onchange = () => {
+        const i = d.ingredients[el.dataset.k]; i[el.dataset.f] = el.value;
+        if (el.dataset.f === "name" && !i.cat) {
+          const c = knownCategory(el.value);
+          if (c) { i.cat = c; $(`select[data-k="${el.dataset.k}"][data-f="cat"]`).value = c; }
+        }
+      };
+    });
+    $("#ings").querySelectorAll("[data-rm]").forEach(b => b.onclick = () => { d.ingredients.splice(+b.dataset.rm, 1); redrawIngs(); });
+    $("#addIng").onclick = () => {
+      d.ingredients.push({ name: "", qty: "", unit: "stk", cat: "" }); redrawIngs();
+      const inputs = $("#ings").querySelectorAll('[data-f="name"]'); inputs[inputs.length - 1].focus();
+    };
+    $("#dCancel").onclick = () => dlg.close();
+    $("#dSave").onclick = () => {
+      d.name = d.name.trim();
+      if (!d.name) return toast("Middagen må ha et navn");
+      const clash = db.dinners.find(x => x.id !== d.id && x.name.toLowerCase() === d.name.toLowerCase());
+      if (clash) return toast("Det finnes allerede en middag med det navnet");
+      d.ingredients = d.ingredients
+        .filter(i => i.name.trim())
+        .map(i => ({ name: i.name.trim(), qty: String(i.qty).replace(",", ".").trim(), unit: i.unit, cat: i.cat }));
+      if (orig) Object.assign(orig, d); else db.dinners.push(d);
+      save(); dlg.close(); toast("Lagret"); render();
+    };
+    const del = $("#dDel");
+    if (del) del.onclick = () => {
+      const n = db.log.filter(e => e.dinnerId === d.id).length;
+      if (!confirm(n ? `Slette «${orig.name}»? Den er logget ${n} gang(er), og disse loggføringene slettes også.` : `Slette «${orig.name}»?`)) return;
+      db.dinners = db.dinners.filter(x => x.id !== d.id);
+      db.log = db.log.filter(e => e.dinnerId !== d.id);
+      save(); dlg.close(); render();
+    };
+  }
+  function redrawIngs() { $("#ings").innerHTML = ingHTML(); bind(); }
+  draw();
+  dlg.showModal();
+}
+
+// ---------- SHOPPING LIST ----------
+const shop = { mode: "month", from: "", to: "", counts: null, checked: new Set(), factor: 1 };
+function periodFor(mode) {
+  const t = todayISO();
+  if (mode === "week") return [addDays(t, -6), t];
+  if (mode === "month") return [addDays(t, -29), t];
+  return [shop.from || addDays(t, -29), shop.to || t];
+}
+function countsInPeriod(from, to) {
+  const c = {};
+  db.log.forEach(e => { if (e.date >= from && e.date <= to) c[e.dinnerId] = (c[e.dinnerId] || 0) + 1; });
+  return c;
+}
+function aggregate(counts) {
+  const items = {};
+  const missing = [];
+  for (const [id, n] of Object.entries(counts)) {
+    if (!n) continue;
+    const d = dinnerById(id); if (!d) continue;
+    if (!d.ingredients.length) { missing.push(d.name); continue; }
+    for (const i of d.ingredients) {
+      const q = parseFloat(i.qty);
+      const conv = CONVERT[i.unit];
+      const unit = conv ? conv[0] : i.unit;
+      const key = i.name.toLowerCase() + "|" + (isNaN(q) ? "" : unit);
+      const it = items[key] ||= { name: i.name, unit, qty: 0, hasQty: !isNaN(q), cat: i.cat || "Annet", dinners: new Set() };
+      if (!isNaN(q)) it.qty += q * n * (conv ? conv[1] : 1);
+      if (i.cat && it.cat === "Annet") it.cat = i.cat;
+      it.dinners.add(d.name);
+    }
+  }
+  return { items: Object.values(items), missing };
+}
+function fmtQty(it) {
+  if (!it.hasQty) return "";
+  let q = it.qty, u = it.unit;
+  if (u === "g" && q >= 1000) { q /= 1000; u = "kg"; }
+  if (u === "ml") { if (q >= 1000) { q /= 1000; u = "l"; } else if (q >= 100) { q /= 100; u = "dl"; } }
+  return `${fmtNum(q)} ${u}`;
+}
+
+function renderShop() {
+  const v = $("#view");
+  const [from, to] = periodFor(shop.mode);
+  if (!shop.counts) shop.counts = countsInPeriod(from, to);
+  const counts = shop.counts;
+  const scaled = Object.fromEntries(Object.entries(counts).map(([k, n]) => [k, n * shop.factor]));
+  const { items, missing } = aggregate(scaled);
+  const byCat = {};
+  items.forEach(it => (byCat[it.cat] ||= []).push(it));
+  const cats = Object.keys(byCat).sort((a, b) => CATEGORIES.indexOf(a) - CATEGORIES.indexOf(b));
+  cats.forEach(c => byCat[c].sort((a, b) => a.name.localeCompare(b.name, "no")));
+  const totalDinners = Object.values(counts).reduce((a, b) => a + b, 0);
+  const addable = db.dinners.filter(d => !(d.id in counts));
+
+  v.innerHTML = `
+    <div class="card">
+      <h2>Basert på middagene i</h2>
+      <div class="seg" id="seg">
+        <button data-m="week" class="${shop.mode === "week" ? "active" : ""}">Siste uke</button>
+        <button data-m="month" class="${shop.mode === "month" ? "active" : ""}">Siste 30 dager</button>
+        <button data-m="custom" class="${shop.mode === "custom" ? "active" : ""}">Velg periode</button>
+      </div>
+      ${shop.mode === "custom" ? `<div class="row" style="margin-top:8px">
+        <div class="grow"><label>Fra</label><input type="date" id="sFrom" value="${from}"></div>
+        <div class="grow"><label>Til</label><input type="date" id="sTo" value="${to}"></div></div>` : ""}
+      <p class="muted" style="margin:8px 0 0">${fmtDate(from)} – ${fmtDate(to)}</p>
+    </div>
+
+    <div class="card">
+      <div class="row"><h2 class="grow" style="margin:0">Middager (${totalDinners * shop.factor})</h2>
+        <span class="muted">Ganger</span>
+        <div class="stepper"><button data-f="-1">−</button><b>${shop.factor}×</b><button data-f="1">+</button></div></div>
+      <p class="muted" style="margin:6px 0 0">Juster antall for å planlegge neste periode.</p>
+      <ul class="list" style="margin-top:6px">
+        ${Object.keys(counts).length ? Object.entries(counts).map(([id, n]) => { const d = dinnerById(id); return d ? `
+          <li><div class="grow">${esc(d.name)}${!d.ingredients.length ? ' <span class="muted" style="color:var(--danger)">· mangler varer</span>' : ""}</div>
+          <div class="stepper"><button data-c="${id}" data-d="-1">−</button><b>${n}</b><button data-c="${id}" data-d="1">+</button></div></li>` : ""; }).join("")
+        : `<li class="muted">Ingen middager logget i perioden.</li>`}
+      </ul>
+      ${addable.length ? `<div class="row" style="margin-top:8px">
+        <select class="grow" id="addSel"><option value="">Legg til middag…</option>
+          ${addable.sort((a, b) => a.name.localeCompare(b.name, "no")).map(d => `<option value="${d.id}">${esc(d.name)}</option>`).join("")}</select></div>` : ""}
+    </div>
+
+    ${missing.length ? `<div class="card muted">⚠️ Disse middagene har ingen varer registrert ennå: <b>${missing.map(esc).join(", ")}</b>. Legg dem til under «Middager».</div>` : ""}
+
+    <div class="card">
+      <div class="row"><h2 class="grow" style="margin:0">Handleliste</h2><span class="pill">${items.length} varer</span></div>
+      ${items.length ? `
+        <div class="row" style="margin-top:10px">
+          <button class="btn grow" id="copy">📋 Kopier</button>
+          ${navigator.share ? `<button class="btn secondary grow" id="share">Del</button>` : ""}
+        </div>
+        ${cats.map(c => `<h3>${esc(c)}</h3><ul class="list shop">
+          ${byCat[c].map(it => { const k = it.name.toLowerCase() + "|" + it.unit; return `
+            <li class="${shop.checked.has(k) ? "done" : ""}"><input type="checkbox" data-k="${esc(k)}" ${shop.checked.has(k) ? "checked" : ""}>
+              <div class="grow"><div class="name">${esc(it.name)} <b>${fmtQty(it)}</b></div>
+              <div class="muted">${[...it.dinners].map(esc).join(", ")}</div></div></li>`; }).join("")}
+        </ul>`).join("")}
+        <p class="muted">Kryss av det du allerede har hjemme – avkryssede varer tas ikke med når du kopierer.</p>`
+      : `<div class="empty">Ingen varer å vise.</div>`}
+    </div>`;
+
+  v.querySelectorAll("#seg button").forEach(b => b.onclick = () => { shop.mode = b.dataset.m; shop.counts = null; renderShop(); });
+  const sf = $("#sFrom"), st = $("#sTo");
+  if (sf) { sf.onchange = () => { shop.from = sf.value; shop.counts = null; renderShop(); };
+            st.onchange = () => { shop.to = st.value; shop.counts = null; renderShop(); }; }
+  v.querySelectorAll("[data-f]").forEach(b => b.onclick = () => { shop.factor = Math.max(1, shop.factor + +b.dataset.f); renderShop(); });
+  v.querySelectorAll("[data-c]").forEach(b => b.onclick = () => {
+    const n = (shop.counts[b.dataset.c] || 0) + +b.dataset.d;
+    if (n <= 0) delete shop.counts[b.dataset.c]; else shop.counts[b.dataset.c] = n;
+    renderShop();
+  });
+  const addSel = $("#addSel");
+  if (addSel) addSel.onchange = () => { if (addSel.value) { shop.counts[addSel.value] = 1; renderShop(); } };
+  v.querySelectorAll(".shop input[type=checkbox]").forEach(cb => cb.onchange = () => {
+    cb.checked ? shop.checked.add(cb.dataset.k) : shop.checked.delete(cb.dataset.k);
+    cb.closest("li").classList.toggle("done", cb.checked);
+  });
+
+  const text = () => {
+    const lines = [`Handleliste (${totalDinners * shop.factor} middager)`];
+    cats.forEach(c => {
+      const rows = byCat[c].filter(it => !shop.checked.has(it.name.toLowerCase() + "|" + it.unit));
+      if (!rows.length) return;
+      lines.push("", c.toUpperCase());
+      rows.forEach(it => lines.push(`☐ ${it.name}${it.hasQty ? " – " + fmtQty(it) : ""}`));
+    });
+    return lines.join("\n");
+  };
+  const copy = $("#copy");
+  if (copy) copy.onclick = async () => {
+    try { await navigator.clipboard.writeText(text()); toast("Handlelisten er kopiert"); }
+    catch { fallbackCopy(text()); }
+  };
+  const share = $("#share");
+  if (share) share.onclick = () => navigator.share({ title: "Handleliste", text: text() }).catch(() => {});
+}
+function fallbackCopy(t) {
+  const ta = document.createElement("textarea"); ta.value = t; document.body.appendChild(ta); ta.select();
+  try { document.execCommand("copy"); toast("Handlelisten er kopiert"); } catch { toast("Kunne ikke kopiere"); }
+  ta.remove();
+}
+
+// ---------- SETTINGS / BACKUP ----------
+function renderSettings() {
+  $("#view").innerHTML = `
+    <div class="card">
+      <h2>Oversikt</h2>
+      <p class="muted" style="margin:0">${db.dinners.length} middager · ${db.log.length} loggføringer</p>
+    </div>
+    <div class="card">
+      <h2>Backup</h2>
+      <p class="muted">Dataene lagres kun på denne telefonen, i nettleseren. Ta backup jevnlig, og bruk den for å flytte dataene til en annen telefon.</p>
+      <button class="btn block" id="exp">⬇️ Last ned backup</button>
+      <button class="btn secondary block" id="impBtn">⬆️ Gjenopprett fra backup</button>
+      <input type="file" id="imp" accept="application/json,.json" hidden>
+    </div>
+    <div class="card">
+      <h2>Installer på telefonen</h2>
+      <p class="muted" style="margin:0"><b>iPhone:</b> Åpne i Safari → Del-knappen → «Legg til på Hjem-skjerm».<br>
+      <b>Android:</b> Åpne i Chrome → menyen ⋮ → «Installer app» / «Legg til på startskjermen».</p>
+    </div>
+    <div class="card">
+      <button class="btn danger block" id="wipe">Slett alle data</button>
+    </div>`;
+  $("#exp").onclick = () => {
+    const blob = new Blob([JSON.stringify(db, null, 2)], { type: "application/json" });
+    const a = document.createElement("a"); a.href = URL.createObjectURL(blob);
+    a.download = `middagslogg-${todayISO()}.json`; a.click(); URL.revokeObjectURL(a.href);
+  };
+  $("#impBtn").onclick = () => $("#imp").click();
+  $("#imp").onchange = async e => {
+    const f = e.target.files[0]; if (!f) return;
+    try {
+      const d = JSON.parse(await f.text());
+      if (!Array.isArray(d.dinners) || !Array.isArray(d.log)) throw new Error();
+      if (!confirm(`Erstatte dagens data med backupen (${d.dinners.length} middager, ${d.log.length} loggføringer)?`)) return;
+      db = { dinners: d.dinners, log: d.log }; save(); shop.counts = null; toast("Backup gjenopprettet"); render();
+    } catch { toast("Ugyldig backup-fil"); }
+  };
+  $("#wipe").onclick = () => {
+    if (!confirm("Slette ALLE middager og loggføringer? Dette kan ikke angres.")) return;
+    db = { dinners: [], log: [] }; save(); shop.counts = null; render();
+  };
+}
+
+// Ask the browser not to evict our data under storage pressure.
+if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
+if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
+render();
+</script>
+</body>
+</html>
